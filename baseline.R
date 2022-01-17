@@ -9,6 +9,7 @@ library(ggforce)
 library(covidHubUtils)
 library(simplets)
 
+#devtools::install_github("reichlab/simplets")
 source("fit_baseline_one_location.R")
 
 # Set locations and quantiles
