@@ -2,7 +2,7 @@
 # # branch at the time of writing. Before it's merged, we'll work off of a
 # # particular commit in the epipredict repo:
 # pak::pkg_install("cmu-delphi/epipredict@3b809894d00c52ec9e166f26dc6f1c55c671b601")
-remotes::install_github("cmu-delphi/epipredict", ref="3b809894d00c52ec9e166f26dc6f1c55c671b601", dependencies = T)
+#remotes::install_github("cmu-delphi/epipredict", ref="3b809894d00c52ec9e166f26dc6f1c55c671b601", dependencies = T)
 
 library(readr)
 library(dplyr)
