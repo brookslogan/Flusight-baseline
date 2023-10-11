@@ -19,7 +19,7 @@ library(plotly)
 ##############################
 ## Configuration parameters ##
 ##############################
-output_dirpath <- "output"
+output_dirpath <- "C:/Users/rpe5/Desktop/GitHub/Flusight-baseline/weekly-submission/forecasts/Flusight-baseline/"
 
 ######################
 ## Helper functions ##
@@ -215,5 +215,5 @@ if (!dir.exists(output_dirpath)) {
 preds_formatted %>%
   write_csv(file.path(
     output_dirpath,
-    sprintf("%s-Flusight-baseline.csv", reference_date)
+    sprintf("%s-FluSight-baseline.csv", reference_date)
   ))
