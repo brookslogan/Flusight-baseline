@@ -217,3 +217,4 @@ preds_formatted %>%
     output_dirpath,
     sprintf("%s-FluSight-baseline.csv", reference_date)
   ))
+
