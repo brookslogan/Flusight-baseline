@@ -1,9 +1,3 @@
-# # The cdc_baseline_forecaster functionality is still in the v0.0.6 development
-# # branch at the time of writing. Before it's merged, we'll work off of a
-# # particular commit in the epipredict repo:
-# pak::pkg_install("cmu-delphi/epipredict@3b809894d00c52ec9e166f26dc6f1c55c671b601")
-#remotes::install_github("cmu-delphi/epipredict", ref="3b809894d00c52ec9e166f26dc6f1c55c671b601", dependencies = T)
-
 library(readr)
 library(dplyr)
 library(tidyr)
@@ -78,7 +72,7 @@ forecast_as_of_date <- Sys.Date()
 reference_date <- curr_else_next_date_with_ltwday(forecast_as_of_date, 6L) # Saturday
 
 # Validation:
-desired_max_time_value <- reference_date - 14L
+desired_max_time_value <- reference_date - 7L
 
 excess_latency_tbl <- target_edf %>%
   drop_na(weekly_count) %>%
@@ -142,8 +136,8 @@ withr::with_rng_version("4.0.0", withr::with_seed(rng_seed, {
       # The `aheads` are specified relative to the most recent available
       # `time_value` available. Since our `data_frequency` is 1 week (the
       # default), the aheads are in terms of weeks.
-      aheads = 1:5,
-      nsims = 1e5,
+      aheads = 1:4, # horizons 0:3 given our desired_max_time_value
+      nsims = 1e5, # (in case using old dev version where 1e5 isn't the default)
       # (defaults for everything else)
     )
   )
