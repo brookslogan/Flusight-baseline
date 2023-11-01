@@ -78,7 +78,7 @@ forecast_as_of_date <- Sys.Date()
 reference_date <- curr_else_next_date_with_ltwday(forecast_as_of_date, 6L) # Saturday
 
 # Validation:
-desired_max_time_value <- reference_date - 14L
+desired_max_time_value <- reference_date - 7L
 
 excess_latency_tbl <- target_edf %>%
   drop_na(weekly_count) %>%
@@ -142,7 +142,7 @@ withr::with_rng_version("4.0.0", withr::with_seed(rng_seed, {
       # The `aheads` are specified relative to the most recent available
       # `time_value` available. Since our `data_frequency` is 1 week (the
       # default), the aheads are in terms of weeks.
-      aheads = 1:5,
+      aheads = 1:4,
       nsims = 1e5,
       # (defaults for everything else)
     )
