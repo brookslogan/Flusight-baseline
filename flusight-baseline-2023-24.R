@@ -131,6 +131,9 @@ if (prop_locs_overlatent > prop_locs_overlatent_err_thresh) {
 # that would take us beyond R's integer max value.)
 rng_seed <- as.integer((59460707 + as.numeric(reference_date)) %% 2e9)
 withr::with_rng_version("4.0.0", withr::with_seed(rng_seed, {
+  # Forecasts for all but the -1 horizon, in `epipredict`'s forecast output
+  # format. We will want to edit some of the labeling and add horizon -1, so we
+  # won't use this directly.
   fcst <- cdc_baseline_forecaster(
     target_edf %>%
       # Match the start time_value filtering used in the 2022-23 baseline:
@@ -147,6 +150,8 @@ withr::with_rng_version("4.0.0", withr::with_seed(rng_seed, {
       # (defaults for everything else)
     )
   )
+  # Extract the predictions in `epipredict` format, and add horizon -1
+  # predictions:
   preds <- fcst$predictions %>%
     # epipredict infers a "`forecast_date`" equal to, and indexes aheads
     # relative to, the max `time_value` available, which is off from the
@@ -156,6 +161,32 @@ withr::with_rng_version("4.0.0", withr::with_seed(rng_seed, {
     mutate(
       forecast_date = .env$reference_date,
       ahead = as.integer(.data$target_date - .env$reference_date) %/% 7L
+    ) %>%
+    bind_rows(
+      # Prepare -1 horizon predictions:
+      target_edf %>%
+        # Pretend that excess latency, either in the form of missing rows or
+        # NAs, doesn't exist; the last available week will be treated as if it
+        # ended on `desired_max_time_value`:
+        drop_na(weekly_count) %>%
+        slice_max(time_value) %>%
+        transmute(
+          # Like in the preceding rows of `preds`, we will let `forecast_date`
+          # be the `reference_date` and index aheads relative to it:
+          forecast_date = .env$reference_date,
+          target_date = .env$reference_date - 7L,
+          ahead = -1L,
+          geo_value,
+          .pred = weekly_count,
+          # Degenerate (deterministic) distributions:
+          .pred_distn = dist_quantiles(
+            values = map(
+              weekly_count, rep,
+              length(cdc_baseline_args_list()$quantile_levels)
+            ),
+            quantile_levels = cdc_baseline_args_list()$quantile_levels
+          )
+        )
     )
 }))
 
@@ -217,4 +248,3 @@ preds_formatted %>%
     output_dirpath,
     sprintf("%s-FluSight-baseline.csv", reference_date)
   ))
-
