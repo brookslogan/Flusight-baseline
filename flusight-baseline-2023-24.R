@@ -19,8 +19,11 @@ library(plotly)
 ##############################
 ## Configuration parameters ##
 ##############################
-output_dirpath <- "C:/Users/rpe5/Desktop/GitHub/Flusight-baseline/weekly-submission/forecasts/Flusight-baseline/"
+userid <- "rpe5"
+output_dirpath <- paste0("C:/Users/",userid,"/Desktop/GitHub/Flusight-baseline/weekly-submission/forecasts/Flusight-baseline/")
+cat_ouput_dir <- paste0("C:/Users/",userid,"/Desktop/GitHub/FluSight-forecast-hub/model-output/FluSight-equal_cat/")
 
+  
 ######################
 ## Helper functions ##
 ######################
@@ -248,3 +251,30 @@ preds_formatted %>%
     output_dirpath,
     sprintf("%s-FluSight-baseline.csv", reference_date)
   ))
+
+
+
+###########################################################
+## Prepare flat baseline for categorical trend forecasts ##
+###########################################################
+
+# This code uses a template data file for with equal probabilities for each of the five categories
+# and then updates the dates to correspond with a submission with the upcoming Saturday as a reference
+# date. 
+
+flat_cat_template <- read.csv(paste0("C:/Users/",userid,"/Desktop/GitHub/FluSight-forecast-hub/model-output/FluSight-equal_cat/2024-01-06-FluSight-equal_cat.csv"),header=T)
+
+# Find the next Saturday for updating reference_date
+(nsat<-today()+days(7-wday(today())))
+# Update reference_date and target_end_dates for horizon = 0,1,2,3 
+next_dates<-flat_cat_template %>% 
+  mutate(reference_date=nsat,
+         target_end_date=reference_date+weeks(template$horizon))
+write.csv(next_dates,file=paste0(cat_ouput_dir,"/",saturday,"-FluSight-equal_cat.csv"),row.names=FALSE)
+
+## Backup for manually entering a Saturday (e.g., past reference_date needed)
+# saturday<-ymd("2023-10-21")
+# new_date<-template %>% 
+#   mutate(reference_date=saturday,
+#          target_end_date=reference_date+weeks(template$horizon))
+# write.csv(new_date,file=paste0(outputdir,"/",saturday,"-FluSight-equal_cat.csv"),row.names=FALSE)
