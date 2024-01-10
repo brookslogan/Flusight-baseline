@@ -15,6 +15,7 @@ library(epiprocess)
 library(epipredict)
 library(ggplot2)
 library(plotly)
+library(lubridate)
 
 ##############################
 ## Configuration parameters ##
@@ -269,8 +270,8 @@ flat_cat_template <- read.csv(paste0("C:/Users/",userid,"/Desktop/GitHub/FluSigh
 # Update reference_date and target_end_dates for horizon = 0,1,2,3 
 next_dates<-flat_cat_template %>% 
   mutate(reference_date=nsat,
-         target_end_date=reference_date+weeks(template$horizon))
-write.csv(next_dates,file=paste0(cat_ouput_dir,"/",saturday,"-FluSight-equal_cat.csv"),row.names=FALSE)
+         target_end_date=reference_date+weeks(horizon))
+write.csv(next_dates,file=paste0(cat_ouput_dir,"/",nsat,"-FluSight-equal_cat.csv"),row.names=FALSE)
 
 ## Backup for manually entering a Saturday (e.g., past reference_date needed)
 # saturday<-ymd("2023-10-21")
