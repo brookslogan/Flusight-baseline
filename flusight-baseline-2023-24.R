@@ -20,7 +20,7 @@ library(lubridate)
 ##############################
 ## Configuration parameters ##
 ##############################
-userid <- "rpe5"
+userid <- Sys.info()["user"]
 output_dirpath <- paste0("C:/Users/",userid,"/Desktop/GitHub/Flusight-baseline/weekly-submission/forecasts/Flusight-baseline/")
 cat_ouput_dir <- paste0("C:/Users/",userid,"/Desktop/GitHub/FluSight-forecast-hub/model-output/FluSight-equal_cat/")
 
@@ -239,7 +239,7 @@ preds_formatted <- preds %>%
   ) %>%
   drop_na(output_type_id) %>%
   arrange(target, horizon, location) %>%
-  select(
+ dplyr::select(
     reference_date, horizon, target, target_end_date, location,
     output_type, output_type_id, value
   )
