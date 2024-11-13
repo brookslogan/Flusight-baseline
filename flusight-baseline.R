@@ -57,16 +57,37 @@ location_to_abbr <- function(location) {
 ## Fetch, prepare input data ##
 ###############################
 
-# Get target data from cdcepi/FluSight-forecast-hub@main:
-target_tbl <- readr::read_csv(
-  "https://raw.githubusercontent.com/cdcepi/FluSight-forecast-hub/main/target-data/target-hospital-admissions.csv",
-  col_types = cols_only(
-    date = col_date(format = ""),
-    location = col_character(),
-    location_name = col_character(),
-    value = col_double(),
-    weekly_rate = col_double()
+target_tbl_col_spec <- cols_only(
+  date = col_date(format = ""),
+  location = col_character(),
+  location_name = col_character(),
+  value = col_double(),
+  weekly_rate = col_double()
+)
+# (Reading in below tables with this col_spec may produce a message about
+# renaming `` -> `...1` referencing the unnamed column containing row "names"
+# (numbers), but cols_only will immediately drop it.)
+
+# Final version of old-form (<= 2024) reporting:
+target_tbl_old_form <-
+  target_tbl <- readr::read_csv(
+    "https://raw.githubusercontent.com/cdcepi/FluSight-forecast-hub/04e884dce942dd3b8766aee3d8ff1c333b4fb6fa/target-data/target-hospital-admissions.csv",
+    col_types = target_tbl_col_spec
   )
+# Latest version of new-form (>=2024) reporting mirrored at cdcepi/FluSight-forecast-hub@main:
+target_tbl_new_form <- readr::read_csv(
+  "https://raw.githubusercontent.com/cdcepi/FluSight-forecast-hub/main/target-data/target-hospital-admissions.csv",
+  col_types = target_tbl_col_spec
+)
+
+# Hedge against new-form reporting including overlapping time_values with
+# old-form reporting by filtering new-form reporting so it doesn't overlap.
+# Introduce at least a one-week gap so one-ahead delta model to avoid any
+# potential strange deltas between old-form and new-form values.
+target_tbl <- bind_rows(
+  target_tbl_old_form,
+  target_tbl_new_form %>%
+    filter(.data$date >= max(target_tbl_old_form$date) + 14L)
 )
 
 target_edf <- target_tbl %>%
@@ -84,6 +105,18 @@ reference_date <- curr_else_next_date_with_ltwday(forecast_as_of_date, 6L) # Sat
 # Validation:
 desired_max_time_value <- reference_date - 7L
 
+# * that we're not running too late:
+max_time_value <- max(target_edf$time_value)
+if (max_time_value > desired_max_time_value) {
+  cli_abort("
+    The target data run through a max time value of {max_time_value},
+    but we were expecting them to run only through {desired_max_time_value}
+    in order to make predictions at forecast date {forecast_as_of_date},
+    reference date {reference_date}.
+  ")
+}
+
+# * that data's not running too late / we're not running too early:
 excess_latency_tbl <- target_edf %>%
   drop_na(weekly_count) %>%
   group_by(geo_value) %>%
