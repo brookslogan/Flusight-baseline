@@ -159,6 +159,14 @@ if (prop_locs_overlatent > prop_locs_overlatent_err_thresh) {
 ## Prepare baseline ##
 ######################
 
+imposed_min_time_value <- as.Date("2022-08-06") # 2022EW31 Sat
+#
+# ^ For seasons through 2023/2024, this was instead 2021-12-04. For 2024/2025,
+# it has been updated to exclude the low activity during 2021/2022. EW31 was
+# selected as a boundary between 2021/2022 and 2022/2023 to nearly-evenly divide
+# up off-season weeks and to include the full 2022/2023 season ramp-up, though
+# this also includes more flat off-season weeks.
+
 # For reproducibility, run with a particular RNG configuration. Make seed the
 # same for all runs for the same `reference_date`, but different for different
 # `reference_date`s. (It's probably not necessary to change seeds between
@@ -173,8 +181,7 @@ withr::with_rng_version("4.0.0", withr::with_seed(rng_seed, {
   # won't use this directly.
   fcst <- cdc_baseline_forecaster(
     target_edf %>%
-      # Match the start time_value filtering used in the 2022-23 baseline:
-      filter(time_value >= as.Date("2021-12-04")) %>%
+      filter(time_value >= imposed_min_time_value) %>%
       # Don't use interim/preliminary data past the `desired_max_time_value`:
       filter(time_value <= desired_max_time_value),
     "weekly_count",
