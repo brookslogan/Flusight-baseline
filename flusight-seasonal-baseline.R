@@ -290,7 +290,7 @@ peak_intensity <- calculate_kde_quantiles(combo)
 
 full <- bind_rows(peak_intensity, peak_week) %>% mutate(location=as.character(location))
 
-write.csv(full, file = paste0(output_dirpath,sprintf("%s-FluSight-seasonal-baseline.csv", reference_date)))
+write.csv(full, file = paste0(output_dirpath,sprintf("%s-FluSight-base_seasonal.csv", reference_date)))
 
 #write.csv(full, file = paste0(hub_outputpath,sprintf("%s-FluSight-seasonal-baseline.csv", reference_date)))
 
