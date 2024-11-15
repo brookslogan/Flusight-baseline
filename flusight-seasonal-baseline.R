@@ -1,5 +1,6 @@
 
 ##The following code produces the peak week and peak intensity historic baseline estimates for the 2024/2025 season of the FluSight Challenge.
+##This method and code was adapted from the 2015/16 through 2019/20 FluSight Challenge historical baseline generating method.
 
 ##Packages
 library(lubridate)
@@ -11,7 +12,7 @@ library(checkmate)
 #specify output path
 userid <- Sys.info()["user"]
 output_dirpath <- paste0("C:/Users/",userid,"/Desktop/GitHub/Flusight-baseline/weekly-submission/forecasts/Flusight-seasonal-baseline/")
-hub_outputpath <- paste0("C:/Users/",userid,"/Desktop/Github/FluSight-forecast-hub/model-output/Flusight-seasonal-baseline/")
+#hub_outputpath <- paste0("C:/Users/",userid,"/Desktop/Github/FluSight-forecast-hub/model-output/Flusight-seasonal-baseline/")
 
 #########################
 ## Functions
@@ -285,12 +286,11 @@ return(peak_intensity = peak_intensity)
 peak_intensity <- calculate_kde_quantiles(combo)
 
 
-
 ##Export csv
 
 full <- bind_rows(peak_intensity, peak_week) %>% mutate(location=as.character(location))
 
 write.csv(full, file = paste0(output_dirpath,sprintf("%s-FluSight-seasonal-baseline.csv", reference_date)))
 
-write.csv(full, file = paste0(hub_outputpath,sprintf("%s-FluSight-seasonal-baseline.csv", reference_date)))
+#write.csv(full, file = paste0(hub_outputpath,sprintf("%s-FluSight-seasonal-baseline.csv", reference_date)))
 
