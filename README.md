@@ -1,6 +1,6 @@
 # Flusight-baseline
 
-The code in this repository creates the `Flusight-baseline` model in the [Flusight-forecast-data](https://github.com/cdcepi/Flusight-forecast-data) repository.
+The code in this repository creates the `Flusight-baseline` model and `Flusight-seasonal-baseline` model in the [Flusight-forecast-data](https://github.com/cdcepi/Flusight-forecast-data) repository.
 
 ## Dependencies
 
@@ -20,12 +20,14 @@ The baseline model is implemented in R, and has the following package dependenci
 
 ## Running the baseline model
 
-The script `baseline.R` creates the baseline forecasts. It can be run, for example, via
+The script `flusight-baseline.R` creates the Flusight-baseline forecasts. It can be run, for example, via
 
 ```
-Rscript baseline.R
+Rscript flusight-baseline.R
 ```
 
-The script `fit_baseline_one_location.R` contains some helper functions and does not need to be run directly.
+The script `flusight-seasonal-baseline.R` creates the Flusight-seasonal-baseline forecasts.
 
 Baseline forecasts will be saved in the directory `weekly-submission/forecasts/Flusight-baseline`, and forecast plots will be saved in `weekly-submission/plots/Flusight-baseline`.
+
+Seasonal baseline forecasts will be saved in the directory `weekly-submission/forecasts/Flusight-seasonal-baseline`.
