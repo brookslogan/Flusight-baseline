@@ -45,7 +45,8 @@ curr_else_next_date_with_ltwday <- function(date, ltwday) {
 location_to_abbr <- function(location) {
   dictionary <-
     state_census %>%
-    mutate(fips = sprintf("%02d", fips)) %>%
+    # convert fips to character if using old version of `state_census`:
+    mutate(fips = if (is.numeric(fips)) sprintf("%02d", fips) else fips) %>%
     transmute(
       location = case_match(fips, "00" ~ "US", .default = fips),
       abbr
