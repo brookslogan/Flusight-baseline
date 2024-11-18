@@ -75,21 +75,28 @@ target_tbl_old_form <-
     "https://raw.githubusercontent.com/cdcepi/FluSight-forecast-hub/04e884dce942dd3b8766aee3d8ff1c333b4fb6fa/target-data/target-hospital-admissions.csv",
     col_types = target_tbl_col_spec
   )
+
 # Latest version of new-form (>=2024) reporting mirrored at cdcepi/FluSight-forecast-hub@main:
 target_tbl_new_form <- readr::read_csv(
   "https://raw.githubusercontent.com/cdcepi/FluSight-forecast-hub/main/target-data/target-hospital-admissions.csv",
   col_types = target_tbl_col_spec
 )
 
-# Hedge against new-form reporting including overlapping time_values with
-# old-form reporting by filtering new-form reporting so it doesn't overlap.
-# Introduce at least a one-week gap so one-ahead delta model to avoid any
-# potential strange deltas between old-form and new-form values.
-target_tbl <- bind_rows(
-  target_tbl_old_form,
-  target_tbl_new_form %>%
-    filter(.data$date >= max(target_tbl_old_form$date) + 14L)
-)
+if (min(target_tbl_new_form$time_value) <= as.Date("2022-12-31")) {
+  # The new target table includes old time values spanning back pretty far; we
+  # don't need to fill in with old target table values.
+  target_tbl <- target_tbl_new_form
+} else {
+  # The new target table is missing a substantial time range from old-form
+  # reporting. Fill in with old-form reporting where possible. Leave a time gap
+  # between old-form and new-form reporting to prevent any jumps between the two
+  # in the training set for the one-ahead model for the baseline.
+  target_tbl <- bind_rows(
+    target_tbl_old_form %>% filter(date <= min(target_tbl_new_form$time_value) - 14L),
+    target_tbl_new_form
+  )
+}
+# We'll also filter out some early time values below when training the model.
 
 target_edf <- target_tbl %>%
   transmute(
@@ -168,6 +175,9 @@ imposed_min_time_value <- as.Date("2022-08-06") # 2022EW31 Sat
 # up off-season weeks and to include the full 2022/2023 season ramp-up, though
 # this also includes more flat off-season weeks.
 
+pause_min_time_value <- as.Date("2024-04-27") + 7L # Sat
+pause_max_time_value <- as.Date("2024-11-09") - 7L # Sat
+
 # For reproducibility, run with a particular RNG configuration. Make seed the
 # same for all runs for the same `reference_date`, but different for different
 # `reference_date`s. (It's probably not necessary to change seeds between
@@ -183,7 +193,10 @@ withr::with_rng_version("4.0.0", withr::with_seed(rng_seed, {
   fcst <- cdc_baseline_forecaster(
     target_edf %>%
       filter(time_value >= imposed_min_time_value) %>%
-      # Don't use interim/preliminary data past the `desired_max_time_value`:
+      filter(!between(time_value, pause_min_time_value, pause_max_time_value)) %>%
+      # Don't use interim/preliminary data past the `desired_max_time_value`
+      # (shouldn't do anything if we raised an error earlier on about
+      # unexpectedly low latency):
       filter(time_value <= desired_max_time_value),
     "weekly_count",
     cdc_baseline_args_list(
