@@ -45,7 +45,8 @@ curr_else_next_date_with_ltwday <- function(date, ltwday) {
 location_to_abbr <- function(location) {
   dictionary <-
     state_census %>%
-    mutate(fips = sprintf("%02d", fips)) %>%
+    # convert fips to character if using old version of `state_census`:
+    mutate(fips = if (is.numeric(fips)) sprintf("%02d", fips) else fips) %>%
     transmute(
       location = case_match(fips, "00" ~ "US", .default = fips),
       abbr
@@ -57,17 +58,45 @@ location_to_abbr <- function(location) {
 ## Fetch, prepare input data ##
 ###############################
 
-# Get target data from cdcepi/FluSight-forecast-hub@main:
-target_tbl <- readr::read_csv(
-  "https://raw.githubusercontent.com/cdcepi/FluSight-forecast-hub/main/target-data/target-hospital-admissions.csv",
-  col_types = cols_only(
-    date = col_date(format = ""),
-    location = col_character(),
-    location_name = col_character(),
-    value = col_double(),
-    weekly_rate = col_double()
-  )
+target_tbl_col_spec <- cols_only(
+  date = col_date(format = ""),
+  location = col_character(),
+  location_name = col_character(),
+  value = col_double(),
+  weekly_rate = col_double()
 )
+# (Reading in below tables with this col_spec may produce a message about
+# renaming `` -> `...1` referencing the unnamed column containing row "names"
+# (numbers), but cols_only will immediately drop it.)
+
+# Final version of old-form (<= 2024) reporting:
+target_tbl_old_form <-
+  target_tbl <- readr::read_csv(
+    "https://raw.githubusercontent.com/cdcepi/FluSight-forecast-hub/04e884dce942dd3b8766aee3d8ff1c333b4fb6fa/target-data/target-hospital-admissions.csv",
+    col_types = target_tbl_col_spec
+  )
+
+# Latest version of new-form (>=2024) reporting mirrored at cdcepi/FluSight-forecast-hub@main:
+target_tbl_new_form <- readr::read_csv(
+  "https://raw.githubusercontent.com/cdcepi/FluSight-forecast-hub/main/target-data/target-hospital-admissions.csv",
+  col_types = target_tbl_col_spec
+)
+
+if (min(target_tbl_new_form$time_value) <= as.Date("2022-12-31")) {
+  # The new target table includes old time values spanning back pretty far; we
+  # don't need to fill in with old target table values.
+  target_tbl <- target_tbl_new_form
+} else {
+  # The new target table is missing a substantial time range from old-form
+  # reporting. Fill in with old-form reporting where possible. Leave a time gap
+  # between old-form and new-form reporting to prevent any jumps between the two
+  # in the training set for the one-ahead model for the baseline.
+  target_tbl <- bind_rows(
+    target_tbl_old_form %>% filter(date <= min(target_tbl_new_form$time_value) - 14L),
+    target_tbl_new_form
+  )
+}
+# We'll also filter out some early time values below when training the model.
 
 target_edf <- target_tbl %>%
   transmute(
@@ -84,6 +113,18 @@ reference_date <- curr_else_next_date_with_ltwday(forecast_as_of_date, 6L) # Sat
 # Validation:
 desired_max_time_value <- reference_date - 7L
 
+# * that we're not running too late:
+max_time_value <- max(target_edf$time_value)
+if (max_time_value > desired_max_time_value) {
+  cli_abort("
+    The target data run through a max time value of {max_time_value},
+    but we were expecting them to run only through {desired_max_time_value}
+    in order to make predictions at forecast date {forecast_as_of_date},
+    reference date {reference_date}.
+  ")
+}
+
+# * that data's not running too late / we're not running too early:
 excess_latency_tbl <- target_edf %>%
   drop_na(weekly_count) %>%
   group_by(geo_value) %>%
@@ -126,6 +167,17 @@ if (prop_locs_overlatent > prop_locs_overlatent_err_thresh) {
 ## Prepare baseline ##
 ######################
 
+imposed_min_time_value <- as.Date("2022-08-06") # 2022EW31 Sat
+#
+# ^ For seasons through 2023/2024, this was instead 2021-12-04. For 2024/2025,
+# it has been updated to exclude the low activity during 2021/2022. EW31 was
+# selected as a boundary between 2021/2022 and 2022/2023 to nearly-evenly divide
+# up off-season weeks and to include the full 2022/2023 season ramp-up, though
+# this also includes more flat off-season weeks.
+
+pause_min_time_value <- as.Date("2024-04-27") + 7L # Sat
+pause_max_time_value <- as.Date("2024-11-09") - 7L # Sat
+
 # For reproducibility, run with a particular RNG configuration. Make seed the
 # same for all runs for the same `reference_date`, but different for different
 # `reference_date`s. (It's probably not necessary to change seeds between
@@ -140,9 +192,11 @@ withr::with_rng_version("4.0.0", withr::with_seed(rng_seed, {
   # won't use this directly.
   fcst <- cdc_baseline_forecaster(
     target_edf %>%
-      # Match the start time_value filtering used in the 2022-23 baseline:
-      filter(time_value >= as.Date("2021-12-04")) %>%
-      # Don't use interim/preliminary data past the `desired_max_time_value`:
+      filter(time_value >= imposed_min_time_value) %>%
+      filter(!between(time_value, pause_min_time_value, pause_max_time_value)) %>%
+      # Don't use interim/preliminary data past the `desired_max_time_value`
+      # (shouldn't do anything if we raised an error earlier on about
+      # unexpectedly low latency):
       filter(time_value <= desired_max_time_value),
     "weekly_count",
     cdc_baseline_args_list(
