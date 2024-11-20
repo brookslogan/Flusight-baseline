@@ -82,7 +82,7 @@ target_tbl_new_form <- readr::read_csv(
   col_types = target_tbl_col_spec
 )
 
-if (min(target_tbl_new_form$time_value) <= as.Date("2022-12-31")) {
+if (min(target_tbl_new_form$date) <= as.Date("2022-12-31")) {
   # The new target table includes old time values spanning back pretty far; we
   # don't need to fill in with old target table values.
   target_tbl <- target_tbl_new_form
