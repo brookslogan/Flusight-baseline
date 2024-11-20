@@ -1,9 +1,3 @@
-# # The cdc_baseline_forecaster functionality is still in the v0.0.6 development
-# # branch at the time of writing. Before it's merged, we'll work off of a
-# # particular commit in the epipredict repo:
-# pak::pkg_install("cmu-delphi/epipredict@3b809894d00c52ec9e166f26dc6f1c55c671b601")
-#remotes::install_github("cmu-delphi/epipredict", ref="3b809894d00c52ec9e166f26dc6f1c55c671b601", dependencies = T)
-
 library(readr)
 library(dplyr)
 library(tidyr)
@@ -42,16 +36,21 @@ curr_else_next_date_with_ltwday <- function(date, ltwday) {
   date + (ltwday - as.POSIXlt(date)$wday) %% 7L
 }
 
+location_abbr_dictionary <-
+  state_census %>%
+  # convert fips to character if using old version of `state_census`:
+  mutate(fips = if (is.numeric(fips)) sprintf("%02d", fips) else fips) %>%
+  transmute(
+    location = case_match(fips, "00" ~ "US", .default = fips),
+    abbr
+  )
+
 location_to_abbr <- function(location) {
-  dictionary <-
-    state_census %>%
-    # convert fips to character if using old version of `state_census`:
-    mutate(fips = if (is.numeric(fips)) sprintf("%02d", fips) else fips) %>%
-    transmute(
-      location = case_match(fips, "00" ~ "US", .default = fips),
-      abbr
-    )
-  dictionary$abbr[match(location, dictionary$location)]
+  location_abbr_dictionary$abbr[match(location, location_abbr_dictionary$location)]
+}
+
+abbr_to_location <- function(abbr) {
+  location_abbr_dictionary$location[match(abbr, location_abbr_dictionary$abbr)]
 }
 
 ###############################
@@ -178,6 +177,8 @@ imposed_min_time_value <- as.Date("2022-08-06") # 2022EW31 Sat
 pause_min_time_value <- as.Date("2024-04-27") + 7L # Sat
 pause_max_time_value <- as.Date("2024-11-09") - 7L # Sat
 
+n_output_trajectories <- 100L
+
 # For reproducibility, run with a particular RNG configuration. Make seed the
 # same for all runs for the same `reference_date`, but different for different
 # `reference_date`s. (It's probably not necessary to change seeds between
@@ -187,6 +188,42 @@ pause_max_time_value <- as.Date("2024-11-09") - 7L # Sat
 # that would take us beyond R's integer max value.)
 rng_seed <- as.integer((59460707 + as.numeric(reference_date)) %% 2e9)
 withr::with_rng_version("4.0.0", withr::with_seed(rng_seed, {
+  # Temporary approach to grab trajectory samples from epipredict without
+  # requiring epipredict update:
+  subsamples_by_geo <- list()
+  trace(epipredict:::propagate_samples, exit = quote({
+    n <- 1L
+    e <- rlang::caller_env(n)
+    while(! ".data" %in% names(e)) {
+      n <- n + 1L
+      e <- rlang::caller_env(n)
+      if (identical(e, globalenv()) || identical(e, emptyenv())) {
+        cli::cli_abort("Failed to find the target geo_value to attach to this trajectory sample.")
+      }
+    }
+    target_geo <- e$.data$geo_value
+    sample_by_horizon <- res
+    # sample_by_horizon is sorted by horizon 0 draws, so we can't just take the
+    # first n_output_trajectories of them; subsample instead:
+    selected_trajectory_inds <- sample.int(length(sample_by_horizon[[1L]]), n_output_trajectories)
+    subsample_by_horizon <- lapply(sample_by_horizon, `[`, selected_trajectory_inds)
+    # Ensure non-negative:
+    subsample_by_horizon <- lapply(subsample_by_horizon, pmax, 0L)
+    # Prepare sample ids; the ith draw for each of the horizons belong to the
+    # same sample, so they should have the same sample id; sampling is performed
+    # separately for each geo, so different geos should have different sets of
+    # ids:
+    subsample_ids_every_horizon <- paste0(target_geo, "_s", seq_len(n_output_trajectories))
+    subsample <- tibble(
+      geo_value = target_geo,
+      horizon = seq_along(subsample_by_horizon) - 1L,
+      output_type_id = rep(list(subsample_ids_every_horizon), length(horizon)),
+      value = subsample_by_horizon
+    ) %>%
+      unchop(c(output_type_id, value))
+    .GlobalEnv[["subsamples_by_geo"]] <- c(.GlobalEnv[["subsamples_by_geo"]], list(subsample))
+  }))
+  #
   # Forecasts for all but the -1 horizon, in `epipredict`'s forecast output
   # format. We will want to edit some of the labeling and add horizon -1, so we
   # won't use this directly.
@@ -248,6 +285,12 @@ withr::with_rng_version("4.0.0", withr::with_seed(rng_seed, {
     )
 }))
 
+subsamples <- subsamples_by_geo %>%
+  bind_rows() %>%
+  mutate(reference_date = .env$reference_date,
+         target_date = reference_date + 7L * horizon) %>%
+  mutate(value = round(value)) # currently inconsistent with quantile preds not rounding
+
 ##########
 ## Plot ##
 ##########
@@ -255,6 +298,7 @@ withr::with_rng_version("4.0.0", withr::with_seed(rng_seed, {
 preds_wide <- pivot_quantiles_wider(preds, .pred_distn)
 plot_states <- sort(unique(target_edf$geo_value))
 plot_ncol <- 3L
+plot_ntraj <- 10L
 plt <-
   preds_wide %>%
   filter(geo_value %in% plot_states) %>%
@@ -271,6 +315,11 @@ plt <-
       arrange(geo_value),
     aes(x = time_value, y = weekly_count)
   ) +
+  geom_line(
+    data = subsamples %>% slice_head(n = plot_ntraj, by = c(geo_value, horizon)),
+    aes(y = value, group = output_type_id),
+    alpha = 0.1
+  ) +
   scale_x_date(limits = c(reference_date - 120, reference_date + 30)) +
   labs(x = "Date", y = "Weekly admissions") +
   facet_wrap(~geo_value, scales = "free_y", ncol = plot_ncol) +
@@ -286,7 +335,7 @@ ggplotly(plt, height = 400 * length(plot_states) / plot_ncol)
 ## Format, write ##
 ###################
 
-preds_formatted <- preds %>%
+quantile_preds_formatted <- preds %>%
   flusight_hub_formatter(
     target = "wk inc flu hosp",
     output_type = "quantile"
@@ -296,10 +345,30 @@ preds_formatted <- preds %>%
   dplyr::mutate(
     value = ifelse(output_type_id < 0.5, floor(value), ceiling(value))  # Round value based on output_type_id
   ) %>%
+  dplyr::mutate(
+    output_type_id = as.character(output_type_id)
+  ) %>%
   dplyr::select(
     reference_date, horizon, target, target_end_date, location,
     output_type, output_type_id, value
   )
+
+sample_preds_formatted <- subsamples %>%
+  transmute(
+    reference_date,
+    horizon,
+    target = "wk inc flu hosp",
+    target_end_date = target_date,
+    location = abbr_to_location(geo_value),
+    output_type = "sample",
+    output_type_id,
+    value
+  )
+
+preds_formatted <- bind_rows(list(
+  quantile_preds_formatted,
+  sample_preds_formatted
+))
 
 if (!dir.exists(output_dirpath)) {
   dir.create(output_dirpath, recursive = TRUE)
